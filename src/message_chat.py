@@ -3,7 +3,7 @@ import flet as ft
 from src.message import Message
 
 
-class MessageChat(ft.Row):
+class MessageComponent(ft.Row):
     def __init__(self, message: Message):
         super().__init__()
         self.vertical_alignment="start"

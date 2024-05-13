@@ -1,12 +1,15 @@
+from typing import Callable, Optional, List
 import flet as ft
 
-from src.message_chat import MessageChat
+from src.message_list import MessageListComponent
+from src.message_chat import MessageComponent
 from src.message import Message
 
 
 class MessageApp():
-    def __init__(self, page: ft.Page):
+    def __init__(self, page: ft.Page, message_answerer: Optional[Callable[[Message], None]] = Message):
         self.page = page
+        self.message_answerer = message_answerer
 
         self.page.horizontal_alignment = "stretch"
         self.page.title = "Flet Chat"
@@ -27,11 +30,7 @@ class MessageApp():
         )
 
         # Chat messages
-        self.chat = ft.ListView(
-            expand=True,
-            spacing=10,
-            auto_scroll=True,
-        )
+        self.chat = MessageListComponent()
 
         # A new message entry form
         self.new_message = ft.TextField(
@@ -68,13 +67,23 @@ class MessageApp():
 
         self.page.pubsub.subscribe(self.on_message)
 
+    @property
+    def user_name(self):
+        return self.page.session.get("user_name")
+    
+    @user_name.setter
+    def user_name(self, value):
+        self.page.session.set("user_name", value)
+        self.chat.main_user_name = value
+        self.page.update()
+
 
     def join_chat_click(self, e):
         if not self.join_user_name.value:
             self.join_user_name.error_text = "Name cannot be blank!"
             self.join_user_name.update()
         else:
-            self.page.session.set("user_name", self.join_user_name.value)
+            self.user_name = self.join_user_name.value
             self.page.dialog.open = False
             self.new_message.prefix = ft.Text(f"{self.join_user_name.value}: ")
             self.page.pubsub.send_all(Message(user_name=self.join_user_name.value, text=f"{self.join_user_name.value} has joined the chat.", message_type="login_message"))
@@ -82,16 +91,23 @@ class MessageApp():
 
     def send_message_click(self, e):
         if self.new_message.value != "":
-            self.page.pubsub.send_all(Message(self.page.session.get("user_name"), self.new_message.value, message_type="chat_message"))
+            message = Message(self.user_name, self.new_message.value, message_type="chat_message")
+            self.page.pubsub.send_all(message)
             self.new_message.value = ""
             self.new_message.focus()
             self.page.update()
 
+            if self.message_answerer:
+                answer = self.message_answerer(message)
+                if answer:
+                    self.page.pubsub.send_all(answer)        
+
+
     def on_message(self, message: Message):
         if message.message_type == "chat_message":
-            m = MessageChat(message)
+            m = MessageComponent(message)
         elif message.message_type == "login_message":
             m = ft.Text(message.text, italic=True, color=ft.colors.BLACK45, size=12)
-        self.chat.controls.append(m)
+        self.chat.add_message(message)
         self.page.update()
 
